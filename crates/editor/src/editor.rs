@@ -21051,18 +21051,20 @@ impl Editor {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let selection = self
-            .selections
-            .newest::<Point>(&self.display_snapshot(cx))
-            .start
-            .row
-            + 1;
+        let selection = self.selections.newest::<Point>(&self.display_snapshot(cx));
+        let start_line = selection.start.row + 1;
+        let end_line = selection.end.row + 1;
+
         if let Some(file_location) = self.active_excerpt(cx).and_then(|(_, buffer, _)| {
             let project = self.project()?.read(cx);
             let file = buffer.read(cx).file()?;
             let path = file.path().display(project.path_style(cx));
 
-            Some(format!("{path}:{selection}"))
+            if start_line == end_line {
+                Some(format!("{path}:{start_line}"))
+            } else {
+                Some(format!("{path}:{start_line}-{end_line}"))
+            }
         }) {
             cx.write_to_clipboard(ClipboardItem::new_string(file_location));
         }

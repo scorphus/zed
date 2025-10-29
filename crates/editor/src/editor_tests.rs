@@ -29222,3 +29222,58 @@ async fn test_multiline_selection_highlighting(cx: &mut TestAppContext) {
         );
     });
 }
+
+#[gpui::test]
+async fn test_copy_file_location(cx: &mut TestAppContext) {
+    init_test(cx, |_| {});
+
+    let fs = FakeFs::new(cx.executor());
+    fs.insert_tree(
+        path!("/root"),
+        json!({
+            "test.rs": "line1\nline2\nline3\nline4\nline5\n",
+        }),
+    )
+    .await;
+
+    let project = Project::test(fs, [path!("/root").as_ref()], cx).await;
+    let buffer = project
+        .update(cx, |project, cx| {
+            project.open_local_buffer(path!("/root/test.rs"), cx)
+        })
+        .await
+        .unwrap();
+
+    let buffer = cx.new(|cx| MultiBuffer::singleton(buffer, cx));
+    let (editor, cx) = cx.add_window_view(|window, cx| {
+        build_editor_with_project(project.clone(), buffer, window, cx)
+    });
+
+    // Test single line: cursor on line 3
+    editor.update_in(cx, |editor, window, cx| {
+        editor.change_selections(Default::default(), window, cx, |s| {
+            s.select_ranges([Point::new(2, 0)..Point::new(2, 0)]);
+        });
+        editor.copy_file_location(&CopyFileLocation, window, cx);
+    });
+
+    assert_eq!(
+        cx.read_from_clipboard()
+            .and_then(|item| item.text().as_deref().map(str::to_string)),
+        Some("test.rs:3".to_string())
+    );
+
+    // Test multi-line range: lines 2-4
+    editor.update_in(cx, |editor, window, cx| {
+        editor.change_selections(Default::default(), window, cx, |s| {
+            s.select_ranges([Point::new(1, 0)..Point::new(3, 5)]);
+        });
+        editor.copy_file_location(&CopyFileLocation, window, cx);
+    });
+
+    assert_eq!(
+        cx.read_from_clipboard()
+            .and_then(|item| item.text().as_deref().map(str::to_string)),
+        Some("test.rs:2-4".to_string())
+    );
+}
