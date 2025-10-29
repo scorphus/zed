@@ -3040,6 +3040,39 @@ mod tests {
         });
         editor_cx.assert_editor_state("«ˇfoo»\n«ˇFOO»\nFoo\nfoo");
     }
+    #[gpui::test]
+    async fn test_query_suggestion_multiline(cx: &mut TestAppContext) {
+        init_globals(cx);
+        let buffer = cx.new(|cx| Buffer::local("line1\nline2\nline3\n", cx));
+        let mut editor = None;
+        let window = cx.add_window(|window, cx| {
+            editor = Some(cx.new(|cx| Editor::for_buffer(buffer.clone(), None, window, cx)));
+            let mut search_bar = BufferSearchBar::new(None, window, cx);
+            search_bar.set_active_pane_item(Some(&editor.clone().unwrap()), window, cx);
+            search_bar
+        });
+        let search_bar = window.root(cx).unwrap();
+        let cx = VisualTestContext::from_window(*window, cx).into_mut();
+        let editor = editor.unwrap();
+
+        // Select text spanning multiple lines
+        editor.update_in(cx, |editor, window, cx| {
+            editor.change_selections(Default::default(), window, cx, |s| {
+                s.select_ranges([Point::new(0, 0)..Point::new(1, 5)]);
+            });
+        });
+
+        // Deploy search bar, which should populate query from selection
+        search_bar.update_in(cx, |search_bar, window, cx| {
+            search_bar.deploy(&Deploy::find(), window, cx);
+        });
+
+        // Verify the query contains the multi-line selection
+        search_bar.update_in(cx, |search_bar, _window, cx| {
+            let query = search_bar.query(cx);
+            assert_eq!(query, "line1\nline2");
+        });
+    }
 
     fn update_search_settings(search_settings: SearchSettings, cx: &mut TestAppContext) {
         cx.update(|cx| {
