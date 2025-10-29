@@ -256,6 +256,10 @@ impl EditorElement {
         register_action(editor, window, Editor::shuffle_lines);
         register_action(editor, window, Editor::rotate_selections_forward);
         register_action(editor, window, Editor::rotate_selections_backward);
+        register_action(editor, window, Editor::insert_numbers_zero_to_n);
+        register_action(editor, window, Editor::insert_numbers_n_to_zero);
+        register_action(editor, window, Editor::insert_numbers_one_to_n);
+        register_action(editor, window, Editor::insert_numbers_n_to_one);
         register_action(editor, window, Editor::convert_indentation_to_spaces);
         register_action(editor, window, Editor::convert_indentation_to_tabs);
         register_action(editor, window, Editor::convert_to_upper_case);

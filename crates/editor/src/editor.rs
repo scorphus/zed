@@ -11694,6 +11694,103 @@ impl Editor {
         });
     }
 
+    pub fn insert_numbers_zero_to_n(
+        &mut self,
+        _: &InsertNumbersZeroToN,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.insert_sequential_numbers(window, cx, |i, _| i.to_string())
+    }
+
+    pub fn insert_numbers_n_to_zero(
+        &mut self,
+        _: &InsertNumbersNToZero,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.insert_sequential_numbers(window, cx, |i, n| (n - 1 - i).to_string())
+    }
+
+    pub fn insert_numbers_one_to_n(
+        &mut self,
+        _: &InsertNumbersOneToN,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.insert_sequential_numbers(window, cx, |i, _| (i + 1).to_string())
+    }
+
+    pub fn insert_numbers_n_to_one(
+        &mut self,
+        _: &InsertNumbersNToOne,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.insert_sequential_numbers(window, cx, |i, n| (n - i).to_string())
+    }
+
+    fn insert_sequential_numbers<F>(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+        number_fn: F,
+    ) where
+        F: Fn(usize, usize) -> String,
+    {
+        self.hide_mouse_cursor(HideMouseCursorOrigin::TypingAction, cx);
+        let display_snapshot = self.display_snapshot(cx);
+        let mut selections = self.selections.all::<MultiBufferOffset>(&display_snapshot);
+
+        if selections.is_empty() {
+            return;
+        }
+
+        let num_cursors = selections.len();
+
+        selections.sort_by_key(|s| s.id);
+        let mut selections: Vec<_> = selections.into_iter().enumerate().collect();
+        selections.sort_by_key(|(_, selection)| selection.start);
+
+        let (edits, new_selections) = {
+            let mut offset_delta = 0i64;
+            let mut new_sels = Vec::new();
+            let edits: Vec<_> = selections
+                .iter()
+                .map(|(selection_order, selection)| {
+                    let number_text = number_fn(*selection_order, num_cursors);
+                    let number_len = number_text.len() as i64;
+                    let old_len = (selection.end.0 - selection.start.0) as i64;
+                    let adjusted_start =
+                        MultiBufferOffset((selection.start.0 as i64 + offset_delta) as usize);
+                    let adjusted_end =
+                        MultiBufferOffset((adjusted_start.0 as i64 + number_len) as usize);
+
+                    new_sels.push(Selection {
+                        id: selection.id,
+                        start: adjusted_end,
+                        end: adjusted_end,
+                        reversed: selection.reversed,
+                        goal: selection.goal,
+                    });
+
+                    offset_delta += number_len - old_len;
+                    (selection.start..selection.end, number_text)
+                })
+                .collect();
+            (edits, new_sels)
+        };
+
+        self.transact(window, cx, |this, window, cx| {
+            this.buffer.update(cx, |buffer, cx| {
+                buffer.edit(edits, None, cx);
+            });
+            this.change_selections(Default::default(), window, cx, |s| {
+                s.select(new_selections);
+            });
+        });
+    }
+
     fn manipulate_lines<M>(
         &mut self,
         window: &mut Window,
