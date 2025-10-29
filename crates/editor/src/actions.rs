@@ -669,6 +669,18 @@ actions!(
         RotateBackward,
         /// Rotates selections or lines forward.
         RotateForward,
+        /// Inserts sequential numbers 0 to N-1 at each cursor.
+        #[action(name = "InsertNumbers_0ToN")]
+        InsertNumbersZeroToN,
+        /// Inserts sequential numbers N-1 to 0 at each cursor.
+        #[action(name = "InsertNumbersNTo_0")]
+        InsertNumbersNToZero,
+        /// Inserts sequential numbers 1 to N at each cursor.
+        #[action(name = "InsertNumbers_1ToN")]
+        InsertNumbersOneToN,
+        /// Inserts sequential numbers N to 1 at each cursor.
+        #[action(name = "InsertNumbersNTo_1")]
+        InsertNumbersNToOne,
         /// Runs flycheck diagnostics.
         RunFlycheck,
         /// Scrolls the cursor to the bottom of the viewport.
