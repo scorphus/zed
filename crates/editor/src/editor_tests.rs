@@ -29186,3 +29186,39 @@ async fn test_find_references_single_case(cx: &mut TestAppContext) {
 
     cx.assert_editor_state(after);
 }
+#[gpui::test]
+async fn test_multiline_selection_highlighting(cx: &mut TestAppContext) {
+    init_test(cx, |_| {});
+
+    let editor = cx.add_window(|window, cx| {
+        let buffer = MultiBuffer::build_simple("a\nb\n\na\nb\n", cx);
+        build_editor(buffer, window, cx)
+    });
+
+    _ = editor.update(cx, |editor, window, cx| {
+        // Select first "a\nb"
+        editor.change_selections(Default::default(), window, cx, |s| {
+            s.select_ranges([Point::new(0, 0)..Point::new(1, 1)]);
+        });
+    });
+
+    cx.executor()
+        .advance_clock(SELECTION_HIGHLIGHT_DEBOUNCE_TIMEOUT);
+    cx.executor().run_until_parked();
+
+    _ = editor.update(cx, |editor, window, cx| {
+        let snapshot = editor.snapshot(window, cx);
+        let buffer = editor.buffer.read(cx).snapshot(cx);
+        let highlights = editor.sorted_background_highlights_in_range(
+            buffer.anchor_before(0)..buffer.anchor_after(buffer.len()),
+            &snapshot,
+            cx.theme(),
+        );
+
+        // Should highlight the second occurrence at lines 3-4
+        assert_eq!(
+            highlights.into_iter().map(|(range, _)| range).collect::<Vec<_>>(),
+            vec![DisplayPoint::new(DisplayRow(3), 0)..DisplayPoint::new(DisplayRow(4), 1)]
+        );
+    });
+}

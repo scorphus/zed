@@ -7118,9 +7118,9 @@ impl Editor {
         }
         let snapshot = self.snapshot(window, cx);
         let selection = self.selections.newest::<Point>(&snapshot);
-        // If the selection spans multiple rows OR it is empty
-        if selection.start.row != selection.end.row
-            || selection.start.column == selection.end.column
+        // If the selection is empty
+        if selection.start.column == selection.end.column
+            && selection.start.row == selection.end.row
         {
             return None;
         }
