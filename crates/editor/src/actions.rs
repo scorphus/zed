@@ -696,6 +696,10 @@ actions!(
         /// Inserts sequential numbers N to 1 at each cursor.
         #[action(name = "InsertNumbersNTo_1")]
         InsertNumbersNToOne,
+        /// Increments the number at each cursor or selection.
+        IncrementNumber,
+        /// Decrements the number at each cursor or selection.
+        DecrementNumber,
         /// Runs flycheck diagnostics.
         RunFlycheck,
         /// Scrolls the cursor to the bottom of the viewport.

@@ -29217,7 +29217,10 @@ async fn test_multiline_selection_highlighting(cx: &mut TestAppContext) {
 
         // Should highlight the second occurrence at lines 3-4
         assert_eq!(
-            highlights.into_iter().map(|(range, _)| range).collect::<Vec<_>>(),
+            highlights
+                .into_iter()
+                .map(|(range, _)| range)
+                .collect::<Vec<_>>(),
             vec![DisplayPoint::new(DisplayRow(3), 0)..DisplayPoint::new(DisplayRow(4), 1)]
         );
     });
@@ -29283,7 +29286,8 @@ fn test_insert_sequential_numbers(cx: &mut TestAppContext) {
     init_test(cx, |_| {});
 
     _ = cx.add_window(|window, cx| {
-        let (text, selection_ranges) = marked_text_ranges("item ˇ\nitem ˇ\nitem ˇ\nitem ˇ\nitem ˇ", true);
+        let (text, selection_ranges) =
+            marked_text_ranges("item ˇ\nitem ˇ\nitem ˇ\nitem ˇ\nitem ˇ", true);
         let buffer = MultiBuffer::build_simple(&text, cx);
         let mut editor = build_editor(buffer, window, cx);
         editor.change_selections(SelectionEffects::no_scroll(), window, cx, |s| {
@@ -29292,25 +29296,37 @@ fn test_insert_sequential_numbers(cx: &mut TestAppContext) {
 
         // Test 0..N (0, 1, 2, 3, 4)
         editor.insert_numbers_zero_to_n(&InsertNumbersZeroToN, window, cx);
-        assert_eq!(editor.display_text(cx), "item 0\nitem 1\nitem 2\nitem 3\nitem 4");
+        assert_eq!(
+            editor.display_text(cx),
+            "item 0\nitem 1\nitem 2\nitem 3\nitem 4"
+        );
 
         // Undo and test N..0 (4, 3, 2, 1, 0)
         editor.undo(&Undo, window, cx);
         assert_eq!(editor.display_text(cx), "item \nitem \nitem \nitem \nitem ");
         editor.insert_numbers_n_to_zero(&InsertNumbersNToZero, window, cx);
-        assert_eq!(editor.display_text(cx), "item 4\nitem 3\nitem 2\nitem 1\nitem 0");
+        assert_eq!(
+            editor.display_text(cx),
+            "item 4\nitem 3\nitem 2\nitem 1\nitem 0"
+        );
 
         // Undo and test 1..N (1, 2, 3, 4, 5)
         editor.undo(&Undo, window, cx);
         assert_eq!(editor.display_text(cx), "item \nitem \nitem \nitem \nitem ");
         editor.insert_numbers_one_to_n(&InsertNumbersOneToN, window, cx);
-        assert_eq!(editor.display_text(cx), "item 1\nitem 2\nitem 3\nitem 4\nitem 5");
+        assert_eq!(
+            editor.display_text(cx),
+            "item 1\nitem 2\nitem 3\nitem 4\nitem 5"
+        );
 
         // Undo and test N..1 (5, 4, 3, 2, 1)
         editor.undo(&Undo, window, cx);
         assert_eq!(editor.display_text(cx), "item \nitem \nitem \nitem \nitem ");
         editor.insert_numbers_n_to_one(&InsertNumbersNToOne, window, cx);
-        assert_eq!(editor.display_text(cx), "item 5\nitem 4\nitem 3\nitem 2\nitem 1");
+        assert_eq!(
+            editor.display_text(cx),
+            "item 5\nitem 4\nitem 3\nitem 2\nitem 1"
+        );
 
         editor
     });
@@ -29332,7 +29348,8 @@ fn test_insert_sequential_numbers(cx: &mut TestAppContext) {
 
     // Test replacing selected text
     _ = cx.add_window(|window, cx| {
-        let (text, selection_ranges) = marked_text_ranges("value: «xˇ»\nvalue: «yˇ»\nvalue: «zˇ»", true);
+        let (text, selection_ranges) =
+            marked_text_ranges("value: «xˇ»\nvalue: «yˇ»\nvalue: «zˇ»", true);
         let buffer = MultiBuffer::build_simple(&text, cx);
         let mut editor = build_editor(buffer, window, cx);
         editor.change_selections(SelectionEffects::no_scroll(), window, cx, |s| {
@@ -29359,6 +29376,135 @@ fn test_insert_sequential_numbers(cx: &mut TestAppContext) {
 
         editor.insert_numbers_one_to_n(&InsertNumbersOneToN, window, cx);
         assert_eq!(editor.display_text(cx), "line1 3\nline2 2\nline3 1");
+
+        editor
+    });
+}
+
+#[gpui::test]
+fn test_increment_decrement_number(cx: &mut TestAppContext) {
+    init_test(cx, |_| {});
+
+    _ = cx.add_window(|window, cx| {
+        let (text, selection_ranges) = marked_text_ranges("value = 42ˇ", true);
+        let buffer = MultiBuffer::build_simple(&text, cx);
+        let mut editor = build_editor(buffer, window, cx);
+        editor.change_selections(SelectionEffects::no_scroll(), window, cx, |s| {
+            s.select_ranges(selection_ranges)
+        });
+
+        editor.increment_number(&IncrementNumber, window, cx);
+        assert_eq!(editor.display_text(cx), "value = 43");
+
+        editor.decrement_number(&DecrementNumber, window, cx);
+        assert_eq!(editor.display_text(cx), "value = 42");
+
+        editor.decrement_number(&DecrementNumber, window, cx);
+        assert_eq!(editor.display_text(cx), "value = 41");
+
+        editor
+    });
+
+    _ = cx.add_window(|window, cx| {
+        let (text, selection_ranges) = marked_text_ranges("x=-5ˇ", true);
+        let buffer = MultiBuffer::build_simple(&text, cx);
+        let mut editor = build_editor(buffer, window, cx);
+        editor.change_selections(SelectionEffects::no_scroll(), window, cx, |s| {
+            s.select_ranges(selection_ranges)
+        });
+
+        editor.increment_number(&IncrementNumber, window, cx);
+        assert_eq!(editor.display_text(cx), "x=-4");
+
+        editor.decrement_number(&DecrementNumber, window, cx);
+        assert_eq!(editor.display_text(cx), "x=-5");
+
+        editor
+    });
+
+    _ = cx.add_window(|window, cx| {
+        let (text, selection_ranges) = marked_text_ranges("hex = 0xFFˇ", true);
+        let buffer = MultiBuffer::build_simple(&text, cx);
+        let mut editor = build_editor(buffer, window, cx);
+        editor.change_selections(SelectionEffects::no_scroll(), window, cx, |s| {
+            s.select_ranges(selection_ranges)
+        });
+
+        editor.increment_number(&IncrementNumber, window, cx);
+        assert_eq!(editor.display_text(cx), "hex = 0x100");
+
+        editor.decrement_number(&DecrementNumber, window, cx);
+        assert_eq!(editor.display_text(cx), "hex = 0xFF");
+
+        editor
+    });
+
+    _ = cx.add_window(|window, cx| {
+        let (text, selection_ranges) = marked_text_ranges("bin = 0b1010ˇ", true);
+        let buffer = MultiBuffer::build_simple(&text, cx);
+        let mut editor = build_editor(buffer, window, cx);
+        editor.change_selections(SelectionEffects::no_scroll(), window, cx, |s| {
+            s.select_ranges(selection_ranges)
+        });
+
+        editor.increment_number(&IncrementNumber, window, cx);
+        assert_eq!(editor.display_text(cx), "bin = 0b1011");
+
+        editor.decrement_number(&DecrementNumber, window, cx);
+        assert_eq!(editor.display_text(cx), "bin = 0b1010");
+
+        editor
+    });
+
+    _ = cx.add_window(|window, cx| {
+        let (text, selection_ranges) = marked_text_ranges("oct = 0o77ˇ", true);
+        let buffer = MultiBuffer::build_simple(&text, cx);
+        let mut editor = build_editor(buffer, window, cx);
+        editor.change_selections(SelectionEffects::no_scroll(), window, cx, |s| {
+            s.select_ranges(selection_ranges)
+        });
+
+        editor.increment_number(&IncrementNumber, window, cx);
+        assert_eq!(editor.display_text(cx), "oct = 0o100");
+
+        editor.decrement_number(&DecrementNumber, window, cx);
+        assert_eq!(editor.display_text(cx), "oct = 0o77");
+
+        editor
+    });
+
+    _ = cx.add_window(|window, cx| {
+        let (text, selection_ranges) = marked_text_ranges("x=1ˇ  y=5ˇ  z=10ˇ", true);
+        let buffer = MultiBuffer::build_simple(&text, cx);
+        let mut editor = build_editor(buffer, window, cx);
+        editor.change_selections(SelectionEffects::no_scroll(), window, cx, |s| {
+            s.select_ranges(selection_ranges)
+        });
+
+        editor.increment_number(&IncrementNumber, window, cx);
+        assert_eq!(editor.display_text(cx), "x=2  y=6  z=11");
+
+        editor.decrement_number(&DecrementNumber, window, cx);
+        assert_eq!(editor.display_text(cx), "x=1  y=5  z=10");
+
+        editor
+    });
+
+    _ = cx.add_window(|window, cx| {
+        let (text, selection_ranges) = marked_text_ranges("value = «9ˇ»", true);
+        let buffer = MultiBuffer::build_simple(&text, cx);
+        let mut editor = build_editor(buffer, window, cx);
+        editor.change_selections(SelectionEffects::no_scroll(), window, cx, |s| {
+            s.select_ranges(selection_ranges)
+        });
+
+        editor.increment_number(&IncrementNumber, window, cx);
+        assert_eq!(editor.display_text(cx), "value = 10");
+        assert_eq!(editor.selected_text(cx), "10");
+
+        editor.increment_number(&IncrementNumber, window, cx);
+        assert_eq!(editor.display_text(cx), "value = 11");
+        assert_eq!(editor.selected_text(cx), "11");
 
         editor
     });

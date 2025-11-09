@@ -11791,6 +11791,241 @@ impl Editor {
         });
     }
 
+    pub fn increment_number(
+        &mut self,
+        _: &IncrementNumber,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.modify_number(window, cx, 1)
+    }
+
+    pub fn decrement_number(
+        &mut self,
+        _: &DecrementNumber,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.modify_number(window, cx, -1)
+    }
+
+    fn modify_number(&mut self, window: &mut Window, cx: &mut Context<Self>, delta: i64) {
+        self.hide_mouse_cursor(HideMouseCursorOrigin::TypingAction, cx);
+        let display_snapshot = self.display_snapshot(cx);
+        let buffer = self.buffer.read(cx).snapshot(cx);
+        let selections = self.selections.all::<MultiBufferOffset>(&display_snapshot);
+
+        if selections.is_empty() {
+            return;
+        }
+
+        let mut edits = Vec::new();
+        let mut new_selections = Vec::new();
+        let mut offset_delta = 0i64;
+
+        for selection in selections {
+            let (number_range, new_value) = match self.find_and_modify_number_at_selection(
+                &buffer,
+                selection.start.0,
+                selection.end.0,
+                delta,
+            ) {
+                Some(result) => result,
+                None => {
+                    let adjusted_start =
+                        MultiBufferOffset((selection.start.0 as i64 + offset_delta) as usize);
+                    let adjusted_end =
+                        MultiBufferOffset((selection.end.0 as i64 + offset_delta) as usize);
+                    new_selections.push(Selection {
+                        id: selection.id,
+                        start: adjusted_start,
+                        end: adjusted_end,
+                        reversed: selection.reversed,
+                        goal: selection.goal,
+                    });
+                    continue;
+                }
+            };
+
+            let new_value_len = new_value.len() as i64;
+            let old_len = (number_range.end - number_range.start) as i64;
+            let adjusted_start =
+                MultiBufferOffset((number_range.start as i64 + offset_delta) as usize);
+            let adjusted_end =
+                MultiBufferOffset((adjusted_start.0 as i64 + new_value_len) as usize);
+
+            edits.push((
+                MultiBufferOffset(number_range.start)..MultiBufferOffset(number_range.end),
+                new_value,
+            ));
+
+            new_selections.push(Selection {
+                id: selection.id,
+                start: adjusted_start,
+                end: adjusted_end,
+                reversed: selection.reversed,
+                goal: selection.goal,
+            });
+
+            offset_delta += new_value_len - old_len;
+        }
+
+        if edits.is_empty() {
+            return;
+        }
+
+        self.transact(window, cx, |this, window, cx| {
+            this.buffer.update(cx, |buffer, cx| {
+                buffer.edit(edits, None, cx);
+            });
+            this.change_selections(Default::default(), window, cx, |s| {
+                s.select(new_selections);
+            });
+        });
+    }
+
+    fn find_and_modify_number_at_selection(
+        &self,
+        buffer: &MultiBufferSnapshot,
+        start: usize,
+        end: usize,
+        delta: i64,
+    ) -> Option<(Range<usize>, String)> {
+        let text = buffer.text();
+
+        let (number_start, number_end) = if start == end {
+            self.find_number_boundary(&text, start)?
+        } else {
+            (start, end)
+        };
+
+        let number_text = text[number_start..number_end].to_string();
+        let new_value = self.parse_and_modify_number(&number_text, delta)?;
+
+        Some((number_start..number_end, new_value))
+    }
+
+    fn find_number_boundary(&self, text: &str, cursor: usize) -> Option<(usize, usize)> {
+        if cursor > text.len() {
+            return None;
+        }
+
+        let mut start = cursor;
+        let mut end = cursor;
+
+        let chars: Vec<char> = text.chars().collect();
+
+        if cursor < chars.len() && !chars[cursor].is_ascii_digit() && chars[cursor] != '-' {
+            if cursor > 0
+                && (chars[cursor - 1].is_ascii_digit()
+                    || chars[cursor - 1] == 'x'
+                    || chars[cursor - 1] == 'b'
+                    || chars[cursor - 1] == 'o')
+            {
+                end = cursor;
+                start = cursor - 1;
+            } else {
+                return None;
+            }
+        }
+
+        while start > 0 {
+            let prev_char = chars[start - 1];
+            if prev_char.is_ascii_alphanumeric() || prev_char == '-' || prev_char == '_' {
+                start -= 1;
+            } else {
+                break;
+            }
+        }
+
+        while end < chars.len() {
+            let next_char = chars[end];
+            if next_char.is_ascii_alphanumeric() || next_char == '_' {
+                end += 1;
+            } else {
+                break;
+            }
+        }
+
+        let potential_number = text[start..end].to_string();
+
+        if self.looks_like_number(&potential_number) {
+            Some((start, end))
+        } else {
+            None
+        }
+    }
+
+    fn looks_like_number(&self, s: &str) -> bool {
+        if s.is_empty() {
+            return false;
+        }
+
+        let s = s.replace('_', "");
+
+        if s.starts_with("0x") || s.starts_with("0X") {
+            return s.len() > 2 && s[2..].chars().all(|c| c.is_ascii_hexdigit());
+        }
+
+        if s.starts_with("0b") || s.starts_with("0B") {
+            return s.len() > 2 && s[2..].chars().all(|c| c == '0' || c == '1');
+        }
+
+        if s.starts_with("0o") || s.starts_with("0O") {
+            return s.len() > 2 && s[2..].chars().all(|c| c.is_digit(8));
+        }
+
+        if s.starts_with('-') {
+            return s.len() > 1 && s[1..].chars().all(|c| c.is_ascii_digit());
+        }
+
+        s.chars().all(|c| c.is_ascii_digit())
+    }
+
+    fn parse_and_modify_number(&self, s: &str, delta: i64) -> Option<String> {
+        let s = s.trim();
+        let s_no_underscores = s.replace('_', "");
+
+        if s_no_underscores.starts_with("0x") || s_no_underscores.starts_with("0X") {
+            let prefix = &s_no_underscores[0..2];
+            let hex_part = &s_no_underscores[2..];
+            let value = i64::from_str_radix(hex_part, 16).ok()?;
+            let new_value = value.checked_add(delta)?;
+            if new_value < 0 {
+                return None;
+            }
+            let is_uppercase = hex_part.chars().any(|c| c.is_ascii_uppercase());
+            let formatted = if is_uppercase {
+                format!("{:X}", new_value)
+            } else {
+                format!("{:x}", new_value)
+            };
+            Some(format!("{}{}", prefix, formatted))
+        } else if s_no_underscores.starts_with("0b") || s_no_underscores.starts_with("0B") {
+            let prefix = &s_no_underscores[0..2];
+            let bin_part = &s_no_underscores[2..];
+            let value = i64::from_str_radix(bin_part, 2).ok()?;
+            let new_value = value.checked_add(delta)?;
+            if new_value < 0 {
+                return None;
+            }
+            Some(format!("{}{}", prefix, format!("{:b}", new_value)))
+        } else if s_no_underscores.starts_with("0o") || s_no_underscores.starts_with("0O") {
+            let prefix = &s_no_underscores[0..2];
+            let oct_part = &s_no_underscores[2..];
+            let value = i64::from_str_radix(oct_part, 8).ok()?;
+            let new_value = value.checked_add(delta)?;
+            if new_value < 0 {
+                return None;
+            }
+            Some(format!("{}{}", prefix, format!("{:o}", new_value)))
+        } else {
+            let value: i64 = s_no_underscores.parse().ok()?;
+            let new_value = value.checked_add(delta)?;
+            Some(new_value.to_string())
+        }
+    }
+
     fn manipulate_lines<M>(
         &mut self,
         window: &mut Window,
